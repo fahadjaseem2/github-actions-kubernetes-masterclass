@@ -24,7 +24,7 @@ jobs:
           push: true
           tags: |
             
-            ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-ka-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-backend:latest
 
       - name: Build and push frontend
         uses: docker/build-push-action@v7
@@ -33,5 +33,5 @@ jobs:
           push: true
           tags: |
             
-            ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-ka-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-frontend:latest
 
