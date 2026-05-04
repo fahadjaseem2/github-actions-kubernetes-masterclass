@@ -1,25 +1,31 @@
-name: TWS CD Workflow
+name: CD
 
-on: 
-    workflow_run:
-        workflows: ["TWS CI Workflow"] 
-        types: [completed]
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4 # this happens in the runner
-
-            - name: Execute remote SSH commands using password
-              uses: appleboy/ssh-action@v1
-              with:
-                  host: ${{ secrets.HOST }}
-                  username: ${{ secrets.EC2_USER }}
-                  key: ${{ secrets.EC2_SSH_KEY }}
-                  script: |
-                    git clone https://github.com/LondheShubham153/github-actions-demo.git
-                    cd ~/github-actions-demo
-                    git pull origin main
-                    docker compose pull
-                    docker compose down && docker compose up -d
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            if [ ! -d ~/skillpulse ]; then
+              git clone ${{ github.server_url }}/${{ github.repository }}.git ~/skillpulse
+            fi
+            cd ~/skillpulse
+            git pull origin main
+            if [ ! -f .env ]; then
+              echo "ERROR: ~/skillpulse/.env is missing. Create it once with DOCKERHUB_USERNAME and DB credentials."
+              exit 1
+            fi
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
