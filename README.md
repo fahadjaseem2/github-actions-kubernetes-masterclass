@@ -294,24 +294,55 @@ This is the **kind chapter** — same app, real Kubernetes primitives, but limit
 
 ---
 
-## Deploy your own copy
+## Continuous deployment to the kind cluster
 
-1. **Fork this repo.**
-2. **Provision an Ubuntu EC2** (any size; `t3.micro` is enough to learn). Open ports `22` (your IP) and `80` (the world). Note the public IP and the `.pem` key.
-3. **Install Docker on the EC2:**
+The new CD path doesn't `kubectl apply` from GitHub Actions — your kind cluster lives on your laptop, GitHub can't reach it. Instead, the pipeline takes the GitOps shape: **the repo is the source of truth, your cluster is one `git pull && make apply` away**.
+
+```
+git push to main
+    ↓
+CI: build images, push trainwithshubham/skillpulse-{backend,frontend}:{latest,<sha>}
+    ↓
+cd-k8s.yml: sed image: lines in k8s/20-backend.yaml + k8s/30-frontend.yaml
+            commit "deploy: pin backend+frontend to <short-sha>" to main as github-actions[bot]
+    ↓
+(you, locally):
+    git pull && make apply
+    ↓
+kind nodes pull the new :<sha> from Docker Hub → rolling update
+```
+
+### How to wire it up on your fork
+
+1. **Fork this repo + clone locally.** `make up` should work after that (see the [Run on Kubernetes (kind)](#run-on-kubernetes-kind) section).
+2. **Add two secrets** to your fork (`Settings → Secrets and variables → Actions`):
+
+   | Secret | Value |
+   |---|---|
+   | `DOCKERHUB_USERNAME` | your Docker Hub account name |
+   | `DOCKERHUB_TOKEN` | a Docker Hub Personal Access Token with Read & Write scope |
+
+3. **Set the repo variable** `DEPLOY_ENABLED = "true"` (`Settings → Variables → Actions`). Until this is `true`, CI builds without pushing and both CD workflows skip cleanly — the "dry run" state.
+4. **Push any code change** (not a `.md`, not under `k8s/` or `docs/` — those are deliberately ignored by CI). Watch the Actions tab:
+   - **CI** builds + pushes both images to Docker Hub.
+   - **CD (kind cluster — manifest bump)** commits a `deploy: pin backend+frontend to <sha>` change to main.
+5. **Pull and deploy**, on the laptop with the kind cluster:
    ```bash
-   curl -fsSL https://get.docker.com | sh
-   sudo usermod -aG docker $USER && newgrp docker
+   git pull
+   make apply
+   kubectl get pods -n skillpulse -o wide
    ```
-4. **Create `~/skillpulse/.env` on the EC2** with the same variables as `.env.example` plus your Docker Hub username.
-5. **Add the five secrets** to your fork's repo settings (see table above).
-6. **Push any commit to `main`.** Watch the Actions tab. ~90 seconds later, your EC2 IP serves the app.
+   You'll see new pods with the bumped image rolling out. mysql untouched.
 
-Break it on purpose to learn:
+### What about the EC2 path?
 
-- Push a commit that fails to build → CD is *skipped*, not run-and-failed.
-- Rotate the Docker Hub token → next CI fails at the login step. Now you know what an expired credential looks like in logs.
-- Delete `~/skillpulse/.env` on the EC2 → next CD exits with the explicit error message instead of a cryptic compose failure.
+The previous chapter's `cd.yml` is still in the repo — it SSHes into an EC2 and runs `docker compose up`. It's gated on the same `DEPLOY_ENABLED` variable plus three EC2 secrets (`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`). Skip those secrets and `cd.yml` will fail loudly when `DEPLOY_ENABLED=true`; that's expected — it's the previous chapter's deploy target, kept around as the masterclass artifact.
+
+### Break it on purpose to learn
+
+- **Push a commit that fails to build** → both CD workflows are *skipped*, not failed (the `if: success()` gate).
+- **Rotate the Docker Hub token** → next CI fails at the login step. You'll learn what an expired credential looks like in logs.
+- **Edit `k8s/20-backend.yaml`'s image tag by hand and push** → CI is *skipped* (paths-ignore), `cd-k8s.yml` does fire but the manifest is already pinned, so it no-ops and exits 0. That's the loop-protection working.
 
 ---
 
