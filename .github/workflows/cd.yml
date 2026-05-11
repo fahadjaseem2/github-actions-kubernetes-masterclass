@@ -8,11 +8,7 @@ on:
 
 jobs:
   deploy:
-    # Repo variable DEPLOY_ENABLED gates this job. Set it to "true" in
-    # Settings → Variables → Actions when you have a live EC2 + valid
-    # EC2_HOST / EC2_USER / EC2_SSH_KEY secrets. Otherwise CD skips
-    # cleanly so pushes don't red-X the Actions tab.
-    if: ${{ github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_ENABLED == 'true' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1

@@ -4,7 +4,10 @@ A small, real application with a real CI/CD pipeline. The app — SkillPulse —
 
 This repo is the working demo for the **TrainWithShubham GitHub Actions & Kubernetes Masterclass**.
 
-> **New here? Start with the full beginner's guide:** [`docs/skillpulse-cicd-guide.pdf`](docs/skillpulse-cicd-guide.pdf) — a 29-page step-by-step walkthrough covering the foundations (DevOps, CI/CD, containers, GitHub Actions, EC2), how this pipeline is built line-by-line, how to deploy your own copy from scratch, the engineering rationale behind each design choice, and how to talk about this project on your resume and in interviews.
+> **New here? Two beginner-friendly companion guides:**
+>
+> - [`docs/skillpulse-cicd-guide.pdf`](docs/skillpulse-cicd-guide.pdf) — chapter one. 29 pages on the GitHub Actions pipeline: DevOps foundations, CI/CD, containers, deploying to a real EC2, plus resume + interview prep.
+> - [`docs/skillpulse-kubernetes-guide.pdf`](docs/skillpulse-kubernetes-guide.pdf) — chapter two. 32 pages on running this app on a local `kind` cluster: Kubernetes primitives, manifest walkthrough, the dev loop, real failures we hit (arch mismatches, port collisions), interview prep.
 
 ---
 
@@ -179,6 +182,115 @@ To tear down:
 ```bash
 docker compose down -v           # -v also drops the MySQL volume
 ```
+
+---
+
+## Run on Kubernetes (kind)
+
+Same app, same images, same external port — but now every primitive a student would see in production: namespace, deployment, service, statefulset, configmap, secret, pvc.
+
+**Prerequisites:** Docker Desktop running, plus `brew install kind kubectl`.
+
+```bash
+make up                          # creates the kind cluster + applies manifests
+# visit http://localhost:8888
+make down                        # deletes the cluster (and the MySQL data with it)
+```
+
+What `make up` actually runs, in order:
+
+```bash
+docker build -t trainwithshubham/skillpulse-backend:latest  ./backend
+docker build -t trainwithshubham/skillpulse-frontend:latest ./frontend
+kind create cluster --config k8s/kind-config.yaml --name skillpulse
+kind load docker-image trainwithshubham/skillpulse-backend:latest  --name skillpulse
+kind load docker-image trainwithshubham/skillpulse-frontend:latest --name skillpulse
+kubectl apply -f k8s/00-namespace.yaml \
+              -f k8s/10-mysql.yaml \
+              -f k8s/20-backend.yaml \
+              -f k8s/30-frontend.yaml
+kubectl rollout status statefulset/mysql   -n skillpulse --timeout=180s
+kubectl rollout status deployment/backend  -n skillpulse --timeout=120s
+kubectl rollout status deployment/frontend -n skillpulse --timeout=60s
+```
+
+Notes on this flow:
+
+- **`docker build` runs on your laptop**, producing images for your host's architecture (Apple Silicon → arm64; Intel/Linux → amd64). The cluster never has to deal with multi-arch.
+- **`kind load docker-image`** copies each image into the kind node's containerd. `imagePullPolicy: IfNotPresent` on the Deployments means k8s reuses the loaded image and never tries to pull from Docker Hub.
+- **`kind-config.yaml`** lives alongside the manifests for proximity, but it's a `kind` config — not a Kubernetes resource — so it's fed to `kind create cluster`, not `kubectl apply`.
+
+Inner-loop after editing code: `make restart` rebuilds the images, reloads them into the cluster, and rolls the Deployments.
+
+### How traffic flows
+
+The cluster has **three nodes**: one control-plane and two workers (`skillpulse-worker`, `skillpulse-worker2`). Workloads schedule onto the workers — the control-plane is tainted `NoSchedule` by default, so it stays focused on the API server, scheduler, and controller-manager.
+
+```
+host browser            kind cluster (1 control-plane + 2 workers)
+http://localhost:8888
+        │
+        ▼ (kind extraPortMappings on control-plane: hostPort 8888 → nodePort 30080)
+   Service frontend (NodePort 30080)  — reachable on every node, kube-proxy routes
+        │
+        ▼
+   Deployment frontend (nginx + static)  — runs on whichever worker the scheduler picks
+        │ proxy_pass http://backend:8080  (same hostname as docker-compose)
+        ▼
+   Service backend (ClusterIP 8080)
+        │
+        ▼
+   Deployment backend (Go + Gin)
+        │ DB_HOST=mysql
+        ▼
+   Service mysql (Headless 3306)
+        │
+        ▼
+   StatefulSet mysql + 1Gi PVC + ConfigMap-mounted init.sql
+```
+
+### Manifest layout
+
+```
+k8s/
+  kind-config.yaml      cluster shape: 1 control-plane + 2 workers, host 8888 → node 30080
+  00-namespace.yaml     namespace: skillpulse
+  10-mysql.yaml         Secret + ConfigMap (init.sql) + headless Service + StatefulSet + 1Gi PVC
+  20-backend.yaml       Deployment + ClusterIP Service, env from Secret, /health probes
+  30-frontend.yaml      Deployment + NodePort Service (30080), / probes
+```
+
+### Useful commands
+
+| Command | What it does |
+|---|---|
+| `make status` | One-screen view of pods, services, endpoints |
+| `make logs` | Tail all three workloads at once |
+| `make mysql` | Open a `mysql` shell in the StatefulSet pod |
+| `make restart` | Roll backend + frontend (e.g. after pushing a new image) |
+
+### Smoke test
+
+```bash
+curl http://localhost:8888/health                 # → {"status":"healthy"}
+curl http://localhost:8888/api/dashboard          # → seed-data counters
+curl -s http://localhost:8888/ | grep '<title>'   # → HTML title containing "SkillPulse"
+```
+
+### Gotchas worth knowing
+
+- **Docker Desktop must be running.** `docker build`, `kind`, and `kubectl` all talk to the Docker daemon on your machine.
+- **First boot is slow.** The local-path provisioner has to materialise the PVC before MySQL starts. Expect 10–30s of `Pending` on `make up`'s first run.
+- **Host port collision.** If something else owns 8888 on the host, the cluster comes up but `curl localhost:8888` fails. Free the port — or change `hostPort` in `k8s/kind-config.yaml` and re-run `make down && make up`.
+- **No Docker Hub round-trip in this chapter.** Images are built locally and pushed into the kind node via `kind load`. Useful when you're iterating on code: `make restart` rebuilds + reloads + rolls without ever touching Docker Hub. (Production EKS/GKE clusters do pull from a registry — that's the next chapter.)
+
+### What's next
+
+This is the **kind chapter** — same app, real Kubernetes primitives, but limited to one local node and `NodePort` access. The next chapter graduates the same workload to:
+
+- An **Ingress** controller (nginx-ingress) so traffic enters via `Ingress` rules instead of NodePort.
+- **Helm or Kustomize** so the manifests stop being copy-pasted between environments.
+- A real **cloud cluster** (EKS / GKE / AKS) and CD that runs `kubectl apply` from the pipeline instead of `appleboy/ssh-action`.
 
 ---
 
