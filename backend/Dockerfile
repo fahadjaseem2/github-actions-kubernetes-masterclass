@@ -3,7 +3,8 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./   # separate dependency cache layer
+# separate dependency cache layer
+COPY go.mod go.sum ./  
 
 RUN go mod download
 
