@@ -9,13 +9,17 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o skillpulse .
+RUN CGO_ENABLED=0 GOOS=linux go build -o skillpulse .
 
-# Stage 2: Runtime
-FROM gcr.io/distroless/static-debian12
+# Stage 2: Run
+FROM alpine:3.23
 
-COPY --from=builder /app/skillpulse /skillpulse
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+COPY --from=builder /app/skillpulse .
 
 EXPOSE 8080
 
-ENTRYPOINT ["/skillpulse"]
+CMD ["./skillpulse"]
