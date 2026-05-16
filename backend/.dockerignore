@@ -1,0 +1,10 @@
+.git
+.github
+Dockerfile
+README.md
+*.md
+*.log
+tmp
+temp
+coverage
+dist
