@@ -8,7 +8,10 @@ COPY go.mod go.sum ./
 
 RUN go mod download
 
-COPY . .
+COPY main.go ./
+COPY database ./database
+COPY handlers ./handlers
+COPY models ./models
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o skillpulse .
 
