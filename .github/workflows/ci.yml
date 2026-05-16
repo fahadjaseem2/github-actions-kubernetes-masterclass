@@ -8,6 +8,10 @@ on:
       - 'docs/**'
       - '**/*.md'
 
+concurrency:
+  group: ci-main
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-24.04-arm
@@ -29,9 +33,14 @@ jobs:
           context: ./backend
           push: ${{ vars.DEPLOY_ENABLED == 'true' }}
           platforms: linux/arm64
+
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-backend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-backend:${{ github.sha }}
+
   frontend:
     runs-on: ubuntu-24.04-arm
 
@@ -51,7 +60,11 @@ jobs:
         with:
           context: ./frontend
           push: ${{ vars.DEPLOY_ENABLED == 'true' }}
-          platforms: linux/arm64  
+          platforms: linux/arm64
+
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-frontend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-frontend:${{ github.sha }}
