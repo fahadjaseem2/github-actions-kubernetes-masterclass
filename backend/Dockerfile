@@ -3,17 +3,10 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
-# separate dependency cache layer
-COPY go.mod go.sum ./  
+COPY . .
 
-RUN go mod download
-
-COPY main.go ./
-COPY database ./database
-COPY handlers ./handlers
-COPY models ./models
-
-RUN CGO_ENABLED=0 GOOS=linux go build -o skillpulse .
+RUN go mod tidy && \
+    CGO_ENABLED=0 GOOS=linux go build -o skillpulse .
 
 # Stage 2: Run
 FROM alpine:3.23
