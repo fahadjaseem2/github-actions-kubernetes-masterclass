@@ -3,8 +3,13 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
+COPY go.mod go.sum ./   # separate dependency cache layer
+
+RUN go mod download
+
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o skillpulse .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o skillpulse .
 
 # Stage 2: Run
 FROM alpine:3.23
