@@ -1,0 +1,21 @@
+namespace: staging
+
+resources:
+  - ../../base
+
+replicas:
+  - name: backend
+    count: 2
+
+  - name: frontend
+    count: 2
+
+configMapGenerator:
+  - name: app-config
+    literals:
+      - ENV=staging
+
+secretGenerator:
+  - name: app-secret
+    literals:
+      - DB_PASSWORD=stagingpassword

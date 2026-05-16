@@ -1,0 +1,21 @@
+namespace: dev
+
+resources:
+  - ../../base
+
+replicas:
+  - name: backend
+    count: 1
+
+  - name: frontend
+    count: 1
+
+configMapGenerator:
+  - name: app-config
+    literals:
+      - ENV=development
+
+secretGenerator:
+  - name: app-secret
+    literals:
+      - DB_PASSWORD=devpassword
