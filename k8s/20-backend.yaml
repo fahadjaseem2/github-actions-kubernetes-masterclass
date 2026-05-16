@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: fahadjaseem/skillpulse-backend:ce6f904b86a620eb54f685a256fd03a3d41373f3
+          image: fahadjaseem/skillpulse-backend:6c725b4c721c0e3655a39c9650dee21c93c2061b
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
