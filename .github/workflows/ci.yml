@@ -32,7 +32,6 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-backend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-backend:${{ github.sha }}
-
   frontend:
     runs-on: ubuntu-24.04-arm
 
