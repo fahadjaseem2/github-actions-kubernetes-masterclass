@@ -15,7 +15,7 @@ concurrency:
 jobs:
 
   gitleaks:
-    name: Secret Scan
+    name: Secrets Scan (Gitleaks)
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +34,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Lint Backend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
@@ -47,12 +49,48 @@ jobs:
           dockerfile: frontend/Dockerfile
           failure-threshold: error
 
+  go-security:
+    name: Go Security Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Go Vet
+        working-directory: backend
+        run: go vet ./...
+
+  sast:
+    name: SAST Scan (Semgrep)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/ci
+
   backend:
+    name: Build Backend
+    runs-on: ubuntu-24.04-arm
+
     needs:
       - gitleaks
       - docker-lint
-
-    runs-on: ubuntu-24.04-arm
+      - go-security
 
     steps:
       - uses: actions/checkout@v4
@@ -80,11 +118,12 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/skillpulse-backend:${{ github.sha }}
 
   frontend:
+    name: Build Frontend
+    runs-on: ubuntu-24.04-arm
+
     needs:
       - gitleaks
       - docker-lint
-
-    runs-on: ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v4
