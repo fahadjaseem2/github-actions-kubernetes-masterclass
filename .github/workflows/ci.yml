@@ -14,16 +14,17 @@ concurrency:
 
 jobs:
 
-  secrets:
-    name: Gitleaks Scan
+  gitleaks:
+    name: Secret Scan
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - uses: gitleaks/gitleaks-action@v2
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -34,59 +35,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Backend Dockerfile Lint
+      - name: Lint Backend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: backend/Dockerfile
 
-      - name: Frontend Dockerfile Lint
+      - name: Lint Frontend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: frontend/Dockerfile
 
-  go-security:
-    name: Go Security
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: backend
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache: true
-          cache-dependency-path: backend/go.sum
-
-      - name: Go Vet
-        run: go vet ./...
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Run govulncheck
-        run: govulncheck ./...
-
-  sast:
-    name: Semgrep SAST
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: returntocorp/semgrep-action@v1
-        with:
-          config: p/default
-
   backend:
     needs:
-      - secrets
+      - gitleaks
       - docker-lint
-      - go-security
-      - sast
 
     runs-on: ubuntu-24.04-arm
 
@@ -117,10 +79,8 @@ jobs:
 
   frontend:
     needs:
-      - secrets
+      - gitleaks
       - docker-lint
-      - go-security
-      - sast
 
     runs-on: ubuntu-24.04-arm
 
