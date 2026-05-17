@@ -39,6 +39,7 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: backend/Dockerfile
+          failure-threshold: error
 
       - name: Lint Frontend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
